@@ -1,60 +1,9 @@
-# ============================================================
-# FORCE-OPEN IN GOOGLE CHROME (instead of Edge)
-# Streamlit normally launches the OS-default browser. To fix that,
-# run this file directly with:
-#     python tea_lounge_dashboard.py
-# (instead of "streamlit run tea_lounge_dashboard.py"). This block
-# relaunches Streamlit in headless mode and opens Chrome itself.
-# ============================================================
-if __name__ == "__main__" and __import__("os").environ.get("_TEA_LOUNGE_RELAUNCHED") != "1":
-    import os
-    import sys
-    import subprocess
-    import threading
-    import time
-
-    _PORT = "8501"
-
-    def _open_in_chrome():
-        time.sleep(2)
-        url = f"http://localhost:{_PORT}"
-        chrome_candidates = [
-            r"C:\Program Files\Google\Chrome\Application\chrome.exe",
-            r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
-            "google-chrome",
-            "google-chrome-stable",
-            "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-        ]
-        for candidate in chrome_candidates:
-            try:
-                subprocess.Popen([candidate, url])
-                return
-            except (FileNotFoundError, OSError):
-                continue
-        # Fall back to the system default if Chrome isn't found.
-        import webbrowser
-        webbrowser.open(url)
-
-    threading.Thread(target=_open_in_chrome, daemon=True).start()
-
-    _env = os.environ.copy()
-    _env["_TEA_LOUNGE_RELAUNCHED"] = "1"
-    subprocess.run(
-        [
-            sys.executable, "-m", "streamlit", "run", __file__,
-            "--server.headless=true",
-            f"--server.port={_PORT}",
-            "--server.address=0.0.0.0",
-            "--theme.base=light",
-        ],
-        env=_env,
-    )
-    sys.exit(0)
-
+# Run locally with:  streamlit run tea_lounge_dashboard.py
 import os
 import re
 import io
 import json
+import hmac
 import html
 import shutil
 import calendar
@@ -101,6 +50,35 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
+
+# -----------------------------
+# OPTIONAL PASSWORD GATE
+# When the dashboard is on a public URL, anyone with the link could see the
+# sales figures. Set a secret / environment variable called APP_PASSWORD on
+# the host and the app asks for it first. If it isn't set (e.g. on your own
+# PC) nothing changes and no password is asked.
+# -----------------------------
+
+def require_password():
+    try:
+        expected = st.secrets.get("APP_PASSWORD")
+    except Exception:
+        expected = None
+    expected = expected or os.environ.get("APP_PASSWORD")
+    if not expected or st.session_state.get("_authed"):
+        return
+
+    st.markdown("### 🍃 Tea Lounge")
+    typed = st.text_input("Password", type="password", key="_pw_input")
+    if typed:
+        if hmac.compare_digest(str(typed), str(expected)):
+            st.session_state["_authed"] = True
+            st.rerun()
+        st.error("Wrong password.")
+    st.stop()
+
+
+require_password()
 
 # -----------------------------
 # THEME DETECTION
@@ -924,7 +902,9 @@ def summarize_item_sales(sales_df):
 # every month you've ever uploaded, not just the current file.
 # ============================================================
 
-DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tea_lounge_store")
+DATA_DIR = os.environ.get("TEA_LOUNGE_DATA_DIR") or os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "tea_lounge_store"
+)
 INVENTORY_DIR = os.path.join(DATA_DIR, "inventory")
 META_PATH = os.path.join(DATA_DIR, "meta.json")
 
