@@ -2045,17 +2045,63 @@ def gp_upload_panel(existing_months):
 
 
 def gp_render_kpis(totals, prev):
-    quad_row_1 = st.columns(4)
-    quad_card(quad_row_1[0], "💰", "Total Revenue", gp_tk(totals["revenue"]))
-    quad_card(quad_row_1[1], "🧾", "Total Ingredient Cost", gp_tk(totals["cost"]))
-    quad_card(quad_row_1[2], "📈", "Gross Profit", gp_tk(totals["profit"]))
-    quad_card(quad_row_1[3], "🎯", "Gross Margin", gp_pct(totals["margin"]))
-    st.markdown('<div style="height:12px"></div>', unsafe_allow_html=True)
-    quad_row_2 = st.columns(4)
-    quad_card(quad_row_2[0], "🍵", "Cups Sold", fmt_num(totals["cups"]))
-    quad_card(quad_row_2[1], "🏷️", "Avg Selling Price / Cup", gp_tk(totals["avg_price"], 1))
-    quad_card(quad_row_2[2], "🧮", "Avg Cost / Cup", gp_tk(totals["avg_cost"], 1))
-    quad_card(quad_row_2[3], "✨", "Avg Profit / Cup", gp_tk(totals["avg_gp"], 1))
+    """Option C: two grouped panels. Left = gross profit with a margin ring,
+    plus revenue and ingredient cost. Right = cups sold and the averages."""
+    margin = totals["margin"]
+    has_margin = margin is not None and not pd.isna(margin)
+    ring_pct = max(0.0, min(100.0, margin * 100)) if has_margin else 0.0
+    ring_color = GP_LOSS if has_margin and margin < 0 else GP_GREEN
+    profit_color = GP_LOSS if totals["profit"] < 0 else GP_GREEN_DARK
+
+    kpi_css = """<style>
+.gp-kpi { display: grid; grid-template-columns: 1.1fr 1fr; gap: 12px; align-items: stretch; margin: 8px 0 4px 0; }
+.gp-kpi-panel { background: #ffffff; border: 1px solid __LINE__; border-radius: 14px; padding: 16px 20px; display: flex; flex-direction: column; }
+.gp-kpi-hero { display: flex; align-items: center; gap: 18px; margin-bottom: 8px; }
+.gp-kpi-ring { position: relative; width: 96px; height: 96px; flex: 0 0 96px; border-radius: 50%; }
+.gp-kpi-ring::before { content: ""; position: absolute; inset: 10px; background: #ffffff; border-radius: 50%; }
+.gp-kpi-ring span { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 800; color: __TXT__; z-index: 1; }
+.gp-kpi-k { color: __LABEL__; font-size: 12.5px; font-weight: 600; margin: 0; }
+.gp-kpi-big { font-size: 28px; font-weight: 800; line-height: 1.2; margin: 2px 0 2px 0; }
+.gp-kpi-cap { color: __MUTED__; font-size: 12px; margin: 0; }
+.gp-kpi-row { display: flex; justify-content: space-between; align-items: center; flex: 1 1 0; min-height: 40px; padding: 8px 0; border-top: 1px solid #e9f4ee; font-size: 14px; }
+.gp-kpi-row.first { border-top: none; }
+.gp-kpi-row span:first-child { color: __LABEL__; }
+.gp-kpi-row span:last-child { color: __TXT__; font-weight: 800; }
+.gp-kpi-row span.good { color: __GOOD__; }
+@media (max-width: 760px) { .gp-kpi { grid-template-columns: 1fr; } }
+</style>"""
+    for _token, _value in {
+        "__LINE__": GL["card_border"], "__TXT__": GL["section_title"], "__LABEL__": GL["card_label"],
+        "__MUTED__": GL["small_note"], "__GOOD__": GP_GREEN_DARK,
+    }.items():
+        kpi_css = kpi_css.replace(_token, _value)
+
+    ring_style = (
+        f"background: conic-gradient({ring_color} 0 {ring_pct:.2f}%, #e3f1ea {ring_pct:.2f}% 100%);"
+    )
+    kpi_html = "".join([
+        '<div class="gp-kpi">',
+        '<div class="gp-kpi-panel">',
+        '<div class="gp-kpi-hero">',
+        f'<div class="gp-kpi-ring" style="{ring_style}"><span>{gp_pct(margin)}</span></div>',
+        '<div>',
+        '<p class="gp-kpi-k">Gross profit</p>',
+        f'<p class="gp-kpi-big" style="color:{profit_color}">{gp_tk(totals["profit"])}</p>',
+        '<p class="gp-kpi-cap">gross margin shown in ring</p>',
+        '</div>',
+        '</div>',
+        f'<div class="gp-kpi-row"><span>Total revenue</span><span>{gp_tk(totals["revenue"])}</span></div>',
+        f'<div class="gp-kpi-row"><span>Total ingredient cost</span><span>{gp_tk(totals["cost"])}</span></div>',
+        '</div>',
+        '<div class="gp-kpi-panel">',
+        f'<div class="gp-kpi-row first"><span>Cups sold</span><span>{fmt_num(totals["cups"])}</span></div>',
+        f'<div class="gp-kpi-row"><span>Avg selling price</span><span>{gp_tk(totals["avg_price"], 1)}</span></div>',
+        f'<div class="gp-kpi-row"><span>Avg cost</span><span>{gp_tk(totals["avg_cost"], 1)}</span></div>',
+        f'<div class="gp-kpi-row"><span>Avg profit</span><span class="good">{gp_tk(totals["avg_gp"], 1)}</span></div>',
+        '</div>',
+        '</div>',
+    ])
+    st.markdown(kpi_css + kpi_html, unsafe_allow_html=True)
 
     if prev is not None:
         label, p = prev
